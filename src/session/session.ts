@@ -24,8 +24,25 @@ import {
 import { env } from "@/lib/env";
 import { createAskUserProxy } from "@/extensions/ask-user.proxy";
 import { createApprovalProxy } from "@/extensions/approval.proxy";
+import { createSubagentProxy } from "@/extensions/subagent.proxy";
 
-const DEFAULT_TOOLS = ["read", "bash", "edit", "write", "ask_user"] as const;
+// Full Pi SDK built-in tool set. File ops + shell + navigation + web.
+// Pi SDK looks up tools by name from its internal registry; unknown names
+// produce a warning but don't crash the session.
+const DEFAULT_TOOLS = [
+  "read",
+  "write",
+  "edit",
+  "bash",
+  "glob",
+  "grep",
+  "ls",
+  "web_search",
+  "web_fetch",
+  "ask_user",
+  "approval_tool",
+  "subagent",
+] as const;
 
 const join = (...parts: string[]) =>
   parts.join("/").replace(/\/+/g, "/");
@@ -61,13 +78,29 @@ export async function createConversationSession(
 
   const askUserProxy = createAskUserProxy({ conversationId, emitter });
   const approvalProxy = createApprovalProxy({ conversationId, emitter });
+  const subagentProxy = createSubagentProxy({
+    conversationId,
+    emitter,
+    parentDeps: {
+      authStorage,
+      modelRegistry,
+      settingsManager,
+      cwd: env.workspaceDir,
+      agentDir: env.piAgentDir,
+    },
+  });
 
   const resourceLoader = new DefaultResourceLoader({
     agentDir: env.piAgentDir,
     cwd: env.workspaceDir,
-    extensionFactories: [askUserProxy, approvalProxy],
+    extensionFactories: [askUserProxy, approvalProxy, subagentProxy],
     settingsManager,
-    systemPromptOverride: () => systemPrompt,
+    // Use the agent bundle's own .pi/APPEND_SYSTEM.md when present;
+    // fall back to our generic system-pi.md only if it doesn't exist.
+    // Toggle USE_AGENT_BUNDLE_PROMPT=false to force our prompt instead.
+    ...(Bun.env.USE_AGENT_BUNDLE_PROMPT === "false"
+      ? { systemPromptOverride: () => systemPrompt }
+      : {}),
   });
 
   await resourceLoader.reload();

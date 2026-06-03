@@ -176,6 +176,138 @@ export const promptRoute = new Elysia({ name: "prompt-routes" })
     },
   )
 
+  // ── POST /steer ──────────────────────────────────────────────────────────
+  // Inject extra context into a currently-streaming session without
+  // restarting the run. Maps to Pi SDK's session.steer().
+  .post(
+    "/steer",
+    async ({ body, headers, set }) => {
+      requireToken(headers as Record<string, string | undefined>);
+      const session = getSession(body.conversationId);
+      if (!session) {
+        set.status = 404;
+        return { ok: false, reason: "no active session" };
+      }
+      const steerFn = (session as unknown as { steer?: (t: string) => Promise<void> }).steer;
+      if (typeof steerFn !== "function") {
+        set.status = 501;
+        return { ok: false, reason: "steer not supported by this Pi SDK version" };
+      }
+      await steerFn.call(session, body.text);
+      return { ok: true };
+    },
+    {
+      body: t.Object({
+        conversationId: t.String({ minLength: 1 }),
+        text: t.String({ minLength: 1 }),
+      }),
+    },
+  )
+
+  // ── POST /follow-up ──────────────────────────────────────────────────────
+  // Queue a follow-up prompt to run after the current turn completes.
+  .post(
+    "/follow-up",
+    async ({ body, headers, set }) => {
+      requireToken(headers as Record<string, string | undefined>);
+      const session = getSession(body.conversationId);
+      if (!session) {
+        set.status = 404;
+        return { ok: false, reason: "no active session" };
+      }
+      const followUpFn = (session as unknown as { followUp?: (t: string) => Promise<void> }).followUp;
+      if (typeof followUpFn !== "function") {
+        set.status = 501;
+        return { ok: false, reason: "followUp not supported by this Pi SDK version" };
+      }
+      await followUpFn.call(session, body.text);
+      return { ok: true };
+    },
+    {
+      body: t.Object({
+        conversationId: t.String({ minLength: 1 }),
+        text: t.String({ minLength: 1 }),
+      }),
+    },
+  )
+
+  // ── POST /model ──────────────────────────────────────────────────────────
+  // Switch model mid-conversation. Empty `modelId` triggers cycleModel().
+  .post(
+    "/model",
+    async ({ body, headers, set }) => {
+      requireToken(headers as Record<string, string | undefined>);
+      const session = getSession(body.conversationId);
+      if (!session) {
+        set.status = 404;
+        return { ok: false, reason: "no active session" };
+      }
+      const sessAny = session as unknown as {
+        setModel?: (m: unknown) => Promise<void>;
+        cycleModel?: () => Promise<unknown>;
+        model?: { id?: string };
+      };
+      if (body.modelId) {
+        if (typeof sessAny.setModel !== "function") {
+          set.status = 501;
+          return { ok: false, reason: "setModel not available" };
+        }
+        await sessAny.setModel.call(session, { id: body.modelId, provider: body.provider });
+      } else if (typeof sessAny.cycleModel === "function") {
+        await sessAny.cycleModel.call(session);
+      } else {
+        set.status = 501;
+        return { ok: false, reason: "cycleModel not available" };
+      }
+      return { ok: true, model: sessAny.model?.id ?? null };
+    },
+    {
+      body: t.Object({
+        conversationId: t.String({ minLength: 1 }),
+        modelId: t.Optional(t.String()),
+        provider: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // ── POST /thinking-level ─────────────────────────────────────────────────
+  // Set or cycle the thinking depth on the current session.
+  .post(
+    "/thinking-level",
+    ({ body, headers, set }) => {
+      requireToken(headers as Record<string, string | undefined>);
+      const session = getSession(body.conversationId);
+      if (!session) {
+        set.status = 404;
+        return { ok: false, reason: "no active session" };
+      }
+      const sessAny = session as unknown as {
+        setThinkingLevel?: (l: string) => void;
+        cycleThinkingLevel?: () => string | undefined;
+        thinkingLevel?: string;
+      };
+      if (body.level) {
+        if (typeof sessAny.setThinkingLevel !== "function") {
+          set.status = 501;
+          return { ok: false, reason: "setThinkingLevel not available" };
+        }
+        sessAny.setThinkingLevel.call(session, body.level);
+      } else if (typeof sessAny.cycleThinkingLevel === "function") {
+        sessAny.cycleThinkingLevel.call(session);
+      } else {
+        set.status = 501;
+        return { ok: false, reason: "cycleThinkingLevel not available" };
+      }
+      return { ok: true, level: sessAny.thinkingLevel ?? null };
+    },
+    {
+      body: t.Object({
+        conversationId: t.String({ minLength: 1 }),
+        level: t.Optional(t.String({ description: "off | low | medium | high" })),
+      }),
+    },
+  )
+
   // ── GET /status ──────────────────────────────────────────────────────────
   .get("/status", ({ headers }) => {
     requireToken(headers as Record<string, string | undefined>);

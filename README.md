@@ -18,17 +18,38 @@ Separating the SDK from the network façade means we can:
 
 All endpoints require `Authorization: Bearer <INTERNAL_SHARED_TOKEN>`.
 
-| Method | Path                        | Purpose                                        |
-| ------ | --------------------------- | ---------------------------------------------- |
-| POST   | `/prompt`                   | Start a prompt; returns SSE stream of Pi events |
-| POST   | `/interrupt`                | Abort an in-flight prompt                       |
-| POST   | `/ask-user/answer`          | Forward a user answer to a blocked ask-user     |
-| POST   | `/approval/answer`          | Forward an approval decision                    |
-| GET    | `/status`                   | Liveness + active-run state                     |
+| Method | Path                        | Purpose                                                |
+| ------ | --------------------------- | ------------------------------------------------------ |
+| POST   | `/prompt`                   | Start a prompt; returns SSE stream of Pi events        |
+| POST   | `/interrupt`                | Abort an in-flight prompt                              |
+| POST   | `/ask-user/answer`          | Forward a user answer to a blocked ask-user            |
+| POST   | `/approval/answer`          | Forward an approval decision                           |
+| POST   | `/steer`                    | Inject extra context into a streaming run              |
+| POST   | `/follow-up`                | Queue a follow-up prompt after the current turn        |
+| POST   | `/model`                    | Switch model (`modelId` empty → cycleModel)            |
+| POST   | `/thinking-level`           | Set or cycle thinking depth                            |
+| GET    | `/status`                   | Liveness + active-run state                            |
 
 The events emitted are **raw Pi SDK events** (`message_update`, etc.).
 Translation to the gateway's FE event vocabulary is the responsibility of
 `pi-agent-server`.
+
+## Pi SDK features wired
+
+- **Tools**: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `web_search`, `web_fetch`, `ask_user`, `approval_tool`, `subagent`
+- **Sub-agents**: minimal `subagent.proxy.ts` extension spawns child sessions and forwards their events as `subagent_*` upstream
+- **Ask-user & approval**: round-trip via SSE events + dedicated `/answer` endpoints
+- **Skills / prompts / project extensions**: auto-discovered via `DefaultResourceLoader` from the mounted `/workspace/.pi/`
+- **Providers**: 20+ LLMs via env vars (Anthropic, OpenAI, OpenRouter, Gemini, …) — see [Pi providers docs](https://github.com/badlogic/pi-mono)
+- **Session persistence**: `SessionManager.create()` per conversation under `/agent-data/sessions/`
+- **System prompt**: uses the agent bundle's own `.pi/APPEND_SYSTEM.md` by default. Force the generic baked one with `USE_AGENT_BUNDLE_PROMPT=false`.
+
+## What's intentionally NOT yet wired
+
+- Runtime-specific subagent definitions (openclaw-agent/, pi-agent/, hermes-agent/) — current MVP spawns generic children
+- Subagent batch persistence to disk
+- Tree navigation (`session.navigateTree`)
+- Compaction control endpoints (uses Pi defaults)
 
 ## Run locally
 
