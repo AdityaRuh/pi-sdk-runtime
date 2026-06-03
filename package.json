@@ -1,0 +1,20 @@
+{
+  "name": "pi-sdk-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Image 1: PI SDK runtime. Wraps @mariozechner/pi-coding-agent, exposes an internal HTTP+SSE prompt API on :7000. Called only by pi-agent-server.",
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "latest",
+    "elysia": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.0"
+  }
+}
