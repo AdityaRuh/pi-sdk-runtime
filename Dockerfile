@@ -34,6 +34,11 @@ RUN mkdir -p /workspace /agent-data
 EXPOSE 7000
 ENV NODE_ENV=production
 ENV PORT=7000
+# `bun install @mariozechner/pi-coding-agent` drops the Pi CLI at
+# /app/node_modules/.bin/pi. Put that on PATH so new-style PI agents
+# (post AB-570) whose bundled subagent module calls `pi.exec("pi", ...)`
+# can resolve it. Without this, subagent calls fail with ENOENT.
+ENV PATH="/app/node_modules/.bin:${PATH}"
 
 # Non-root for safety.
 RUN addgroup -S piuser && adduser -S piuser -G piuser

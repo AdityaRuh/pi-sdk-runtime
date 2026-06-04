@@ -25,6 +25,7 @@ import { env } from "@/lib/env";
 import { createAskUserProxy } from "@/extensions/ask-user.proxy";
 import { createApprovalProxy } from "@/extensions/approval.proxy";
 import { createSubagentProxy } from "@/extensions/subagent.proxy";
+import { createGatewayUIContext } from "@/lib/ui-bridge";
 
 // Full Pi SDK built-in tool set. File ops + shell + navigation + web.
 // Pi SDK looks up tools by name from its internal registry; unknown names
@@ -118,6 +119,14 @@ export async function createConversationSession(
     settingsManager,
     tools: [...DEFAULT_TOOLS],
   });
+
+  // Bridge Pi SDK's ExtensionUIContext to gateway SSE events.
+  // After this call, `ctx.hasUI === true` and bundled extensions that use
+  // ctx.ui.input / select / confirm route through `ask_user_start` events
+  // and unblock via POST /ask-user/answer — same path our legacy proxy uses.
+  session.extensionRunner.setUIContext(
+    createGatewayUIContext({ conversationId, emitter }),
+  );
 
   return session;
 }
