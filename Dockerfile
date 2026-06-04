@@ -16,7 +16,11 @@ WORKDIR /app
 # `npm:pi-web-access`). Bun isn't a drop-in CLI replacement here, so we
 # install nodejs + npm alongside Bun. Adds ~50 MB; well worth it for
 # full Pi SDK compatibility.
-RUN apk add --no-cache nodejs npm
+#
+# poppler-utils provides `pdftotext` and pandoc provides Office-format
+# conversion. The bundled `document_parse` extension in new-style PI
+# agents (post AB-XXX) shells out to these via `pi.exec`.
+RUN apk add --no-cache nodejs npm poppler-utils pandoc
 
 # Copy installed deps from the deps stage.
 COPY --from=deps /app/node_modules ./node_modules

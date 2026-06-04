@@ -26,6 +26,7 @@ export function createAskUserProxy(opts: {
   return (pi) => {
     pi.registerTool({
       name: "ask_user",
+      label: "Ask User",
       description:
         "Ask the user a question. Blocks until the user answers. Use sparingly — only when you genuinely cannot proceed without input.",
       parameters: {
@@ -40,7 +41,11 @@ export function createAskUserProxy(opts: {
         },
         required: ["question"],
       },
-      async execute({ question, options }: { question: string; options?: string[] }) {
+      async execute(_toolCallId: string, params: { question?: unknown; options?: unknown }) {
+        const question = typeof params?.question === "string" ? params.question : "";
+        const options = Array.isArray(params?.options)
+          ? (params.options.filter((o) => typeof o === "string") as string[])
+          : undefined;
         const askId = crypto.randomUUID();
 
         opts.emitter.emit("ask_user_start", {
@@ -61,7 +66,10 @@ export function createAskUserProxy(opts: {
             selected: answer.selected,
             conversationId: opts.conversationId,
           });
-          return answer.answer;
+          return {
+            content: [{ type: "text", text: answer.answer }],
+            details: { askId, answer: answer.answer, selected: answer.selected },
+          };
         } catch (err) {
           opts.emitter.emit("ask_user_end", {
             askId,

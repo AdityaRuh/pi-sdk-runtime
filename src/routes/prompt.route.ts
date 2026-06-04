@@ -25,6 +25,12 @@ import {
   registerSession,
   unregisterSession,
 } from "@/session/registry";
+import {
+  AttachmentFetchError,
+  AttachmentTooLargeError,
+  UnsupportedAttachmentError,
+  processAttachments,
+} from "@/lib/attachment-processor";
 
 function requireToken(headers: Record<string, string | undefined>): void {
   const auth = headers["authorization"];
@@ -64,6 +70,60 @@ export const promptRoute = new Elysia({ name: "prompt-routes" })
             timestamp: new Date().toISOString(),
           });
 
+          // Process attachments before subscribing/prompting. Failures
+          // surface as `attachment_error` events; subsequent
+          // ask_user/document_parse calls then operate on the cached
+          // local paths. Pure pass-through when no attachments.
+          let images: Awaited<ReturnType<typeof processAttachments>>["images"] = [];
+          let promptSuffix = "";
+          if (body.attachments && body.attachments.length > 0) {
+            try {
+              const processed = await processAttachments(body.attachments, {
+                workspaceDir: env.workspaceDir,
+                runId: body.conversationId,
+                maxImageBytes: env.maxImageBytes,
+                maxDocBytes: env.maxDocBytes,
+                maxAttachmentsPerMessage: env.maxAttachmentsPerMessage,
+              });
+              images = processed.images;
+              promptSuffix = processed.promptSuffix;
+              if (processed.references.length > 0) {
+                channel.send("attachments_processed", {
+                  conversationId: body.conversationId,
+                  count: processed.references.length,
+                  images: processed.images.length,
+                  documents: processed.references.filter((r) => r.kind === "document").length,
+                  references: processed.references.map((r) => ({
+                    id: r.id,
+                    name: r.name,
+                    kind: r.kind,
+                    mimeType: r.mimeType,
+                    sizeBytes: r.sizeBytes,
+                  })),
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            } catch (err) {
+              const reason =
+                err instanceof UnsupportedAttachmentError ? "unsupported" :
+                err instanceof AttachmentTooLargeError ? "too-large" :
+                err instanceof AttachmentFetchError ? "fetch-failed" :
+                "processing-failed";
+              channel.send("attachment_error", {
+                reason,
+                message: err instanceof Error ? err.message : String(err),
+                attachment: (err as { attachment?: unknown }).attachment ?? null,
+                timestamp: new Date().toISOString(),
+              });
+              channel.send("agent_end", {
+                stop_reason: "attachment_error",
+                timestamp: new Date().toISOString(),
+              });
+              channel.close();
+              return;
+            }
+          }
+
           // Subscribe BEFORE prompt so we don't miss early events.
           const unsubscribe = session.subscribe((event) => {
             // Forward raw Pi SDK events. pi-agent-server translates them.
@@ -71,7 +131,9 @@ export const promptRoute = new Elysia({ name: "prompt-routes" })
           });
 
           try {
-            await session.prompt(body.message);
+            const finalMessage = promptSuffix ? `${body.message}${promptSuffix}` : body.message;
+            const promptOpts = images.length > 0 ? { images } : undefined;
+            await session.prompt(finalMessage, promptOpts);
           } finally {
             unsubscribe();
           }
@@ -96,6 +158,12 @@ export const promptRoute = new Elysia({ name: "prompt-routes" })
       body: t.Object({
         conversationId: t.String({ minLength: 1 }),
         message: t.String({ minLength: 1 }),
+        attachments: t.Optional(t.Array(t.Object({
+          url: t.String({ minLength: 1 }),
+          mimeType: t.String({ minLength: 1 }),
+          name: t.String({ minLength: 1 }),
+          sizeBytes: t.Optional(t.Number({ minimum: 0 })),
+        }))),
       }),
     },
   )

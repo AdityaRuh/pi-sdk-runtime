@@ -139,7 +139,7 @@ export function createGatewayUIContext(opts: {
       return isYes(value);
     },
 
-    async editor(title, prefill, _opts) {
+    async editor(title: string, prefill?: string) {
       // Same as input for our purposes — multi-line vs single-line is a TUI distinction.
       const answer = await askForAnswer(title, [], undefined);
       return answer?.answer ?? prefill;

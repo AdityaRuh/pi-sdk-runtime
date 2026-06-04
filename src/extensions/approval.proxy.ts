@@ -19,6 +19,7 @@ export function createApprovalProxy(opts: {
   return (pi) => {
     pi.registerTool({
       name: "approval_tool",
+      label: "Approval",
       description:
         "Request user approval before performing a sensitive action. Blocks until the user decides.",
       parameters: {
@@ -35,7 +36,9 @@ export function createApprovalProxy(opts: {
         },
         required: ["summary"],
       },
-      async execute({ summary, payload }: { summary: string; payload?: unknown }) {
+      async execute(_toolCallId: string, params: { summary?: unknown; payload?: unknown }) {
+        const summary = typeof params?.summary === "string" ? params.summary : "(unspecified action)";
+        const payload = params?.payload;
         const approvalId = crypto.randomUUID();
 
         opts.emitter.emit("approval_required", {
@@ -52,10 +55,14 @@ export function createApprovalProxy(opts: {
           approvalId,
         );
 
-        if (decision.decision === "approve") return "approved";
-        if (decision.decision === "reject")
-          return `rejected${decision.reason ? `: ${decision.reason}` : ""}`;
-        return "cancelled";
+        const text =
+          decision.decision === "approve" ? "approved" :
+          decision.decision === "reject" ? `rejected${decision.reason ? `: ${decision.reason}` : ""}` :
+          "cancelled";
+        return {
+          content: [{ type: "text", text }],
+          details: { approvalId, decision: decision.decision, reason: decision.reason },
+        };
       },
     });
   };

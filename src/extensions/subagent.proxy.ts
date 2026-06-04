@@ -50,6 +50,7 @@ export function createSubagentProxy(opts: SubagentProxyOptions): ExtensionFactor
   return (pi) => {
     pi.registerTool({
       name: "subagent",
+      label: "Subagent",
       description:
         "Delegate a focused task to a sub-agent. The sub-agent runs in the same workspace with file + shell tools and returns its final response. Use for plan/execute/test sub-tasks that benefit from a fresh context.",
       parameters: {
@@ -66,7 +67,9 @@ export function createSubagentProxy(opts: SubagentProxyOptions): ExtensionFactor
         },
         required: ["task"],
       },
-      async execute({ task, name }: { task: string; name?: string }) {
+      async execute(_toolCallId: string, params: { task?: unknown; name?: unknown }) {
+        const task = typeof params?.task === "string" ? params.task : "";
+        const name = typeof params?.name === "string" ? params.name : undefined;
         const subagentId = crypto.randomUUID();
         const label = name?.trim() || "subagent";
         const startedAt = new Date().toISOString();
@@ -127,7 +130,12 @@ export function createSubagentProxy(opts: SubagentProxyOptions): ExtensionFactor
             timestamp: new Date().toISOString(),
           });
 
-          return finalText || "(sub-agent produced no output)";
+          return {
+            content: [
+              { type: "text", text: finalText || "(sub-agent produced no output)" },
+            ],
+            details: { subagentId, name: label, output: finalText, status: "completed" },
+          };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           opts.emitter.emit("subagent_end", {
