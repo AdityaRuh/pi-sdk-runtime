@@ -5,10 +5,9 @@
  * and session files live under /agent-data so a single mounted volume holds
  * everything stateful.
  *
- * Extension wiring here is deliberately minimal — the SDK's built-in tools
- * (read, bash, edit, write) plus the ask-user + approval proxies. Heavy
- * extensions (subagent, save-agent, validation, scaffold) are out of scope
- * for the MVP image; add them in a follow-up.
+ * Extension wiring here is deliberately minimal. The SDK exposes its built-in
+ * tools plus any tools registered by loaded extensions, including the gateway
+ * UI proxies.
  */
 
 import {
@@ -26,24 +25,6 @@ import { createAskUserProxy } from "@/extensions/ask-user.proxy";
 import { createApprovalProxy } from "@/extensions/approval.proxy";
 import { createSubagentProxy } from "@/extensions/subagent.proxy";
 import { createGatewayUIContext } from "@/lib/ui-bridge";
-
-// Full Pi SDK built-in tool set. File ops + shell + navigation + web.
-// Pi SDK looks up tools by name from its internal registry; unknown names
-// produce a warning but don't crash the session.
-const DEFAULT_TOOLS = [
-  "read",
-  "write",
-  "edit",
-  "bash",
-  "glob",
-  "grep",
-  "ls",
-  "web_search",
-  "web_fetch",
-  "ask_user",
-  "approval_tool",
-  "subagent",
-] as const;
 
 const join = (...parts: string[]) =>
   parts.join("/").replace(/\/+/g, "/");
@@ -117,7 +98,6 @@ export async function createConversationSession(
     resourceLoader,
     sessionManager,
     settingsManager,
-    tools: [...DEFAULT_TOOLS],
   });
 
   // Bridge Pi SDK's ExtensionUIContext to gateway SSE events.
