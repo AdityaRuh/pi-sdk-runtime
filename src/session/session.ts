@@ -23,6 +23,7 @@ import {
 import { env } from "@/lib/env";
 import { createAskUserProxy } from "@/extensions/ask-user.proxy";
 import { createApprovalProxy } from "@/extensions/approval.proxy";
+import { createArtifactProxy } from "@/extensions/artifact.proxy";
 import { createSubagentProxy } from "@/extensions/subagent.proxy";
 import { createGatewayUIContext } from "@/lib/ui-bridge";
 
@@ -60,6 +61,7 @@ export async function createConversationSession(
 
   const askUserProxy = createAskUserProxy({ conversationId, emitter });
   const approvalProxy = createApprovalProxy({ conversationId, emitter });
+  const artifactProxy = createArtifactProxy({ conversationId, emitter });
   const subagentProxy = createSubagentProxy({
     conversationId,
     emitter,
@@ -75,7 +77,7 @@ export async function createConversationSession(
   const resourceLoader = new DefaultResourceLoader({
     agentDir: env.piAgentDir,
     cwd: env.workspaceDir,
-    extensionFactories: [askUserProxy, approvalProxy, subagentProxy],
+    extensionFactories: [askUserProxy, approvalProxy, artifactProxy, subagentProxy],
     settingsManager,
     // Use the agent bundle's own .pi/APPEND_SYSTEM.md when present;
     // fall back to our generic system-pi.md only if it doesn't exist.
