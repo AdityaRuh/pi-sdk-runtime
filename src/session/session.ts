@@ -30,6 +30,18 @@ import { createGatewayUIContext } from "@/lib/ui-bridge";
 const join = (...parts: string[]) =>
   parts.join("/").replace(/\/+/g, "/");
 
+const ensureKnowledgebaseEnv = async () => {
+  if (process.env.WIKI_ROOT) return;
+
+  const knowledgebaseConfigPath = join(
+    env.workspaceDir,
+    ".pi/knowledgebase/config.json",
+  );
+  if (await Bun.file(knowledgebaseConfigPath).exists()) {
+    process.env.WIKI_ROOT = join(env.workspaceDir, ".pi/knowledgebase");
+  }
+};
+
 async function loadSystemPrompt(): Promise<string> {
   try {
     return await Bun.file(env.systemPromptPath).text();
@@ -47,6 +59,7 @@ export async function createConversationSession(
   conversationId: string,
   emitter: SessionEventEmitter,
 ): Promise<AgentSession> {
+  await ensureKnowledgebaseEnv();
   const systemPrompt = await loadSystemPrompt();
 
   const authStorage = AuthStorage.create(join(env.piAgentDir, "auth.json"));
